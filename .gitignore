@@ -1,0 +1,8 @@
+.venv/
+venv/
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+/install/*.plist
+/install/*.service

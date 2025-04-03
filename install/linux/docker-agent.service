@@ -1,0 +1,15 @@
+[Unit]
+Description=Docker Monitoring Agent
+After=network.target docker.service redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/docker_agent
+EnvironmentFile=/opt/docker_agent/.env
+ExecStart=/opt/docker_agent/venv/bin/python -m src.agent
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

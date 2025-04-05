@@ -1,4 +1,12 @@
-docker
-psutil
-requests
-python-dotenv
+async-timeout==5.0.1
+certifi==2025.1.31
+charset-normalizer==3.4.1
+docker==7.1.0
+hiredis==3.1.0
+idna==3.10
+psutil==7.0.0
+python-dotenv==1.1.0
+redis==5.2.1
+requests==2.32.3
+typing_extensions==4.13.1
+urllib3==2.3.0

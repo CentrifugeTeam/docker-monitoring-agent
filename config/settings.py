@@ -6,7 +6,7 @@ load_dotenv()
 class Settings:
   DOCKER_SOCKET = os.getenv("DOCKER_SOCKET")
   API_URL = os.getenv("API_URL")
-  API_KEY = os.getenv("API_KEY")
+  TOKEN = os.getenv("TOKEN")
   INTERVAL = int(os.getenv("INTERVAL_SECONDS", 60))
 
 settings = Settings()

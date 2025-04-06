@@ -2,23 +2,23 @@ import asyncio
 import logging
 import socket
 import psutil
+from config.settings import settings
+from .senders.api_auth import Api
 from .collectors.docker import DockerCollector
-from .processors.compressor import GzipCompressor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class DockerAgent:
-    def __init__(self, agent_id, redis_host='localhost'):
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.interval = 60
-        self.agent_id = agent_id
-        self.collector = DockerCollector(agent_id, redis_host)
-        self.compressor = GzipCompressor()
-        self.local_ip = socket.gethostbyname(socket.gethostname())
         self.hostname = socket.gethostname()
+        self.local_ip = "127.0.0.1"
+        self.interval = settings.INTERVAL
+        self.api_auth = Api(self.hostname, self.local_ip)
+        self.collector = DockerCollector(self.api_auth)
 
     async def run(self):
-        await self.collector.init_redis()
+        await self._register_agent()
 
         # Initial data collection
         initial_report = await self._collect_data()
@@ -65,11 +65,9 @@ class DockerAgent:
             return {}
 
     async def _send_report(self, report):
-        try:
-            compressed = self.compressor.compress(report)
-            await self.collector.redis.xadd(
-                "agent_data",
-                {"agent_id": self.agent_id, "data": compressed, "timestamp": int(asyncio.get_event_loop().time())}
-            )
-        except Exception as e:
-            self.logger.error(f"Send failed: {e}")
+        """Отправка топологии данных через API"""
+        # await self.api_auth.send_compressed_data(report)
+
+    async def _register_agent(self):
+        """Регистрация агента через API"""
+        # await self.api_auth.register_agent()

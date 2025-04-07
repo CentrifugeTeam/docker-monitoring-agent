@@ -1,0 +1,132 @@
+import asyncio
+import docker
+import logging
+from datetime import datetime, timezone, timedelta
+
+class DockerCollector:
+    def __init__(self, api_auth=None):
+        self.client = docker.DockerClient(base_url='unix:///Users/germanmironchuc/.docker/run/docker.sock')
+        self.api_auth = api_auth
+        self.known_containers = []
+        self.known_networks = []
+        self.default_networks = ['host', 'none', 'bridge']
+
+        # ⏱️ Добавлено: время последнего обновления stats (оставляем как datetime объект)
+        self.last_stats_check_time = datetime.min.replace(tzinfo=timezone.utc)
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+
+    async def collect(self):
+        try:
+            now = datetime.now(tz=timezone.utc)
+            should_check_stats = (now - self.last_stats_check_time) >= timedelta(hours=1)
+
+            if should_check_stats:
+                self.last_stats_check_time = now
+
+            result = {
+                "networks": [],
+                "containers": [],
+                "known_networks": self.known_networks,
+                "known_containers": self.known_containers
+            }
+
+            networks = await asyncio.to_thread(self.client.networks.list)
+            containers = await asyncio.to_thread(self.client.containers.list)
+
+            network_id_map = {}
+            for network in networks:
+                network_type = network.attrs.get('Driver', 'unknown')
+                if network_type == "overlay":
+                    await self.api_auth.get_or_create_overlay_network(
+                        id_network=network.id,
+                        name_network=network.name,
+                    )
+                if network.name in self.default_networks or self._is_known_network(network.id):
+                    continue
+                network_id_map[network.id] = network.id
+                result["networks"].append({
+                    "name": network.name,
+                    "network_id": network.id
+                })
+
+            for container in containers:
+                container_id = container.short_id
+                container_name = container.name
+
+                if self._is_known_container(container_id):
+                    known = next(c for c in self.known_containers if c["container_id"] == container_id)
+                else:
+                    created_at = datetime.fromisoformat(container.attrs['Created'].replace("Z", "+00:00"))
+                    known = {
+                        "container_id": container_id,
+                        "last_rx": 0,
+                        "last_tx": 0,
+                        "last_active": created_at.isoformat(timespec='milliseconds').replace("+00:00", "Z")
+                    }
+                    self.known_containers.append(known)
+
+                if should_check_stats:
+                    try:
+                        stats = await asyncio.to_thread(container.stats, stream=False)
+                        networks_stats = stats.get("networks", {})
+
+                        rx = sum(int(i.get("rx_bytes", 0)) for i in networks_stats.values())
+                        tx = sum(int(i.get("tx_bytes", 0)) for i in networks_stats.values())
+
+                        if rx > known.get("last_rx", 0) or tx > known.get("last_tx", 0):
+                            known["last_active"] = now.isoformat(timespec='milliseconds').replace("+00:00", "Z")
+
+                        known["last_rx"] = rx
+                        known["last_tx"] = tx
+
+                    except Exception as e:
+                        self.logger.warning(f"Не удалось получить stats для {container_name}: {e}")
+
+                container_networks = container.attrs['NetworkSettings']['Networks']
+                network_ids = [
+                    network_id_map[network.id]
+                    for network in networks
+                    if network.name in container_networks and network.name not in self.default_networks
+                ]
+
+                container_ip = ""
+                for net_info in container_networks.values():
+                    if net_info.get("IPAddress"):
+                        container_ip = net_info["IPAddress"]
+                        break
+
+                created_at = datetime.fromisoformat(container.attrs['Created'].replace("Z", "+00:00"))
+                result["containers"].append({
+                    "name": container.name,
+                    "image": container.attrs['Config']['Image'],
+                    "container_id": container.short_id,
+                    "status": container.status,
+                    "ip": container_ip,
+                    "created_at": created_at.isoformat(timespec='milliseconds').replace("+00:00", "Z"),
+                    "network_ids": network_ids,
+                    "last_active": known["last_active"]  # Уже в правильном формате
+                })
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Ошибка при сборе метрик: {e}")
+            return {
+                "networks": [],
+                "containers": [],
+                "known_networks": [],
+                "known_containers": []
+            }
+
+    def _is_known_container(self, container_id):
+        return any(c["container_id"] == container_id for c in self.known_containers)
+
+    def _is_known_network(self, network_id):
+        return any(n["network_id"] == network_id for n in self.known_networks)

@@ -4,7 +4,7 @@ import socket
 import psutil
 from config.settings import settings
 from .senders.api_auth import Api
-from .collectors.docker import DockerCollector
+from .collectors.docker_get_topology import DockerCollector
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -66,8 +66,14 @@ class DockerAgent:
 
     async def _send_report(self, report):
         """Отправка топологии данных через API"""
-        # await self.api_auth.send_compressed_data(report)
+        response = await self.api_auth.send_compressed_data(report)
+
+        if response:
+            new_known_networks = response.get("networks", [])
+            new_known_containers = response.get("containers", [])
+            self.collector.known_networks.extend(new_known_networks)
+            self.collector.known_containers.extend(new_known_containers)
 
     async def _register_agent(self):
         """Регистрация агента через API"""
-        # await self.api_auth.register_agent()
+        await self.api_auth.register_agent()

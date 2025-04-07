@@ -43,15 +43,24 @@ class Api:
             logger.error(f"💥 Неизвестная ошибка: {e}")
 
     async def send_compressed_data(self, data: dict):
-        """Сжимает данные и отправляет их через защищённый запрос"""
+        """данные и отправляет"""
         try:
+            networks = data["networks"]
+            containers = data["containers"]
+            data = {
+                "networks": networks,
+                "containers": containers
+            }
+            logger.error(f"data:  {data}")
             url = f"{settings.API_URL}/containers/batch"
             headers = {"Authorization": f"Bearer {self.token}"}
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=data, headers=headers)
-                if response.status_code == 200:
+                if response.status_code == 200 or response.status_code == 204:
                     logger.info("✅ Сжатые данные успешно отправлены")
+                    if response.content:
+                        return response.json()
                 else:
                     logger.error(f"❌ Ошибка отправки данных: {response.status_code} — {response.text}")
 
@@ -61,10 +70,14 @@ class Api:
     async def get_or_create_overlay_network(self, id_network: str, name_network: str):
         try:
             url = f"{settings.API_URL}/networks"
+            data = [
+                {
+                    "name": name_network,
+                    "network_id": id_network,
+                }
+            ]
             headers = {"Authorization": f"Bearer {self.token}"}
-
             async with httpx.AsyncClient() as client:
-                pass
-                # response = await client.post(url, json=data, headers=headers)
+                response = await client.post(url, json=data, headers=headers)
         except Exception as e:
             logger.error(f"💥 Ошибка при создание или получение id overlay сети: {e}")

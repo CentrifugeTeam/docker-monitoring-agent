@@ -24,7 +24,7 @@ class DockerCollector:
     async def collect(self):
         try:
             now = datetime.now(tz=timezone.utc)
-            should_check_stats = (now - self.last_stats_check_time) >= timedelta(seconds=10)
+            should_check_stats = (now - self.last_stats_check_time) >= timedelta(hours=1)
             if should_check_stats:
                 self.last_stats_check_time = now
 
@@ -155,8 +155,8 @@ class DockerCollector:
                     "last_active": known["last_active"]
                 })
 
-            self.logger.info(result)
-            return result
+            if result:
+                return result
 
         except Exception as e:
             self.logger.error(f"Ошибка при сборе метрик: {e}")

@@ -24,7 +24,7 @@ class DockerCollector:
     async def collect(self):
         try:
             now = datetime.now(tz=timezone.utc)
-            should_check_stats = (now - self.last_stats_check_time) >= timedelta(hours=1)
+            should_check_stats = (now - self.last_stats_check_time) >= timedelta(seconds=60)
             if should_check_stats:
                 self.last_stats_check_time = now
 
@@ -37,6 +37,19 @@ class DockerCollector:
 
             networks = await asyncio.to_thread(self.client.networks.list)
             containers = await asyncio.to_thread(self.client.containers.list)
+
+            current_containers = await asyncio.to_thread(self.client.containers.list)
+            current_container_ids = {c.short_id for c in current_containers}
+
+            removed_container_ids = {
+                c["container_id"] for c in self.known_containers
+                if c["container_id"] not in current_container_ids
+            }
+
+            self.known_containers = [
+                c for c in self.known_containers
+                if c["container_id"] not in removed_container_ids
+            ]
 
             network_id_map = {}
             for network in networks:

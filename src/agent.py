@@ -70,30 +70,30 @@ class DockerAgent:
 
     async def _send_report(self, report):
         """Отправка топологии данных через API"""
-        # response = await self.api_auth.send_compressed_data(report)
+        response = await self.api_auth.send_compressed_data(report)
 
-        # if response:
-        #     new_known_networks = response.get("networks", [])
-        #     new_known_containers = response.get("containers", [])
+        if response:
+            new_known_networks = response.get("networks", [])
+            new_known_containers = response.get("containers", [])
 
-        #     self.collector.known_networks = new_known_networks
+            self.collector.known_networks = new_known_networks
 
-        #     for new in new_known_containers:
-        #         found = False
-        #         for existing in self.collector.known_containers:
-        #             if existing["container_id"] == new["container_id"]:
-        #                 existing["id"] = new["id"]
-        #                 found = True
-        #                 break
-        #         if not found:
-        #             self.collector.known_containers.append({
-        #                 "container_id": new["container_id"],
-        #                 "id": new["id"],
-        #                 "last_rx": 0,
-        #                 "last_tx": 0,
-        #                 "last_active": datetime.now(tz=timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
-        #             })
+            for new in new_known_containers:
+                found = False
+                for existing in self.collector.known_containers:
+                    if existing["container_id"] == new["container_id"]:
+                        existing["id"] = new["id"]
+                        found = True
+                        break
+                if not found:
+                    self.collector.known_containers.append({
+                        "container_id": new["container_id"],
+                        "id": new["id"],
+                        "last_rx": 0,
+                        "last_tx": 0,
+                        "last_active": datetime.now(tz=timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
+                    })
 
     async def _register_agent(self):
         """Регистрация агента через API"""
-        # await self.api_auth.register_agent()
+        await self.api_auth.register_agent()

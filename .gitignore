@@ -6,3 +6,4 @@ __pycache__/
 .DS_Store
 /install/*.plist
 /install/*.service
+f.txt

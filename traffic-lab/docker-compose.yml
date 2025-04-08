@@ -1,0 +1,23 @@
+version: '3.9'
+
+services:
+  sender:
+    build: .
+    container_name: sender
+    networks:
+      traffic_net:
+        ipv4_address: 172.28.0.2
+
+  receiver:
+    build: .
+    container_name: receiver
+    networks:
+      traffic_net:
+        ipv4_address: 172.28.0.3
+
+networks:
+  traffic_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

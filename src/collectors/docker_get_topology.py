@@ -90,11 +90,13 @@ class DockerCollector:
                 })
 
             for container in containers:
-                if container.name in self.excluded_containers or container.short_id in self.excluded_containers:
-                    continue
-
                 container_id = container.short_id
                 container_name = container.name
+
+                if (container_name in self.excluded_containers or
+                    container_id in self.excluded_containers or
+                    container_id in getattr(self.api_auth, 'excluded_container_ids', set())):
+                    continue
 
                 if self._is_known_container(container_id):
                     known = next(c for c in self.known_containers if c["container_id"] == container_id)
@@ -111,6 +113,28 @@ class DockerCollector:
 
                 if should_check_stats:
                     try:
+                        # Проверяем статус контейнера в Docker
+                        try:
+                            container.reload()  # Обновляем статус контейнера
+                            docker_status = container.status.lower()  # running, exited, paused и т.д.
+
+                            if docker_status != 'running':
+                                status = "stopped"
+                                # Обновляем статус в API, если контейнер остановлен
+                                global_container_id = next((c.get("id") for c in self.known_containers
+                                                        if c["container_id"] == container_id), None)
+                                if global_container_id:
+                                    payload = {
+                                        "status": status,
+                                        "id": global_container_id
+                                    }
+                                    await self.api_auth.change_container_data(data=payload, id=global_container_id)
+                                continue  # Пропускаем сбор статистики для остановленных контейнеров
+                        except Exception as e:
+                            self.logger.error(f"Не удалось проверить статус контейнера {container_name}: {e}")
+                            status = "unknown"
+                            continue
+
                         stats = await asyncio.to_thread(container.stats, stream=False)
                         networks_stats = stats.get("networks", {})
 
@@ -124,7 +148,7 @@ class DockerCollector:
                         known["last_tx"] = tx
 
                         is_alive = (now - datetime.fromisoformat(known["last_active"].replace("Z", "+00:00"))) <= timedelta(minutes=2)
-                        status = "running" if is_alive else "exited"
+                        status = "stoped" if is_alive else "running"
 
                         global_container_id = known.get("id")
                         if global_container_id:

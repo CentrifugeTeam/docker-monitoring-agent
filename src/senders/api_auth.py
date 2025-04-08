@@ -11,6 +11,7 @@ class Api:
         self.hostname = hostname
         self.ip = ip
         self.token = settings.TOKEN
+        self.excluded_container_ids = set()
         self.redis_stream_manager = RedisStreamManager()
         asyncio.create_task(self.redis_stream_manager.connect())
 
@@ -42,6 +43,21 @@ class Api:
         except Exception as e:
             logger.error(f"💥 Неизвестная ошибка: {e}")
 
+    async def _listen_redis_excluded_containers(self):
+        """Прослушивает Redis список на предмет новых исключенных контейнеров"""
+        while True:
+            try:
+                # Блокирующее чтение из Redis списка
+                container_data = await self.redis_stream_manager.redis_client.blpop("excluded_containers", timeout=5)
+                if container_data:
+                    _, container_id = container_data
+                    container_id = container_id.decode()
+                    self.excluded_container_ids.add(container_id)
+                    logger.info(f"🚫 Добавлен контейнер в исключения: {container_id}")
+            except Exception as e:
+                logger.error(f"💥 Ошибка при прослушивании Redis: {e}")
+                await asyncio.sleep(5)
+
     async def send_compressed_data(self, data: dict):
         """отправка топологию сетей и контейнеров"""
         try:
@@ -69,14 +85,12 @@ class Api:
 
     async def get_or_create_overlay_network(self, id_network: str, name_network: str, peers: list[str]):
         try:
-            url = f"{settings.API_URL}/networks"
-            data = [
-                {
+            url = f"{settings.API_URL}/networks/overlay"
+            data = {
                     "name": name_network,
                     "network_id": id_network,
                     "peers": peers
                 }
-            ]
             headers = {"Authorization": f"Bearer {self.token}"}
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=data, headers=headers)

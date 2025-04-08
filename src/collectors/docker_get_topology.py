@@ -4,11 +4,12 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 class DockerCollector:
-    def __init__(self, api_auth=None):
+    def __init__(self, api_auth=None, excluded_containers=None):
         self.client = docker.DockerClient(base_url='unix:///Users/germanmironchuc/.docker/run/docker.sock')
         self.api_auth = api_auth
         self.known_containers = []
         self.known_networks = []
+        self.excluded_containers = excluded_containers or []
         self.default_networks = ['host', 'none', 'bridge']
         self.last_stats_check_time = datetime.now(tz=timezone.utc)
 
@@ -54,6 +55,9 @@ class DockerCollector:
                 })
 
             for container in containers:
+                if container.name in self.excluded_containers or container.short_id in self.excluded_containers:
+                    continue
+
                 container_id = container.short_id
                 container_name = container.name
 
@@ -96,10 +100,10 @@ class DockerCollector:
                                 "id": global_container_id
                             }
 
-                            await self.api_auth.change_container_data(data=payload, id=global_container_id)
+                            # await self.api_auth.change_container_data(data=payload, id=global_container_id)
 
-                            if self.api_auth.redis_stream_manager:
-                                await self.api_auth.redis_stream_manager.send_message(payload)
+                            # if self.api_auth.redis_stream_manager:
+                            #     await self.api_auth.redis_stream_manager.send_message(payload)
 
                     except Exception as e:
                         self.logger.warning(f"Не удалось получить stats для {container_name}: {e}")
@@ -128,6 +132,8 @@ class DockerCollector:
                     "network_ids": network_ids,
                     "last_active": known["last_active"]
                 })
+
+            self.logger.info(result)
             return result
 
         except Exception as e:

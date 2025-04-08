@@ -1,0 +1,15 @@
+docker_socket: "unix:///Users/germanmironchuc/.docker/run/docker.sock"
+api_url: "http://158.160.47.155"
+token: "1yWNTepgOLmRuPadRU/qgURBFc6qCcCVsQRnCxFpetfiYAy4CiULS7frTOQybWSYbJY6AKYTu5P6zA98OhUOvQ=="
+interval_seconds: 60
+excluded_containers:
+  - super_final-fsp_russia-backend-1
+  - super_final-fsp_russia-postgres-1
+  - super_final-fsp_russia-redis_cache-1
+  - super_final-fsp_russia-mysql-1
+  - super_final-fsp_russia-mongodb-1
+  - super_final-fsp_russia-filebeat-1
+  - super_final-fsp_russia-service_calendar-1
+  - super_final-fsp_russia-frontend_calendar-1
+  - super_final-fsp_russia-worker-1
+  - super_final-fsp_russia-nginx-1

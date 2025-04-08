@@ -10,9 +10,7 @@ class DockerCollector:
         self.known_containers = []
         self.known_networks = []
         self.default_networks = ['host', 'none', 'bridge']
-
-        # ⏱️ Добавлено: время последнего обновления stats (оставляем как datetime объект)
-        self.last_stats_check_time = datetime.min.replace(tzinfo=timezone.utc)
+        self.last_stats_check_time = datetime.now(tz=timezone.utc)
 
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
@@ -25,8 +23,7 @@ class DockerCollector:
     async def collect(self):
         try:
             now = datetime.now(tz=timezone.utc)
-            should_check_stats = (now - self.last_stats_check_time) >= timedelta(hours=1)
-
+            should_check_stats = (now - self.last_stats_check_time) >= timedelta(seconds=10)
             if should_check_stats:
                 self.last_stats_check_time = now
 
@@ -68,7 +65,8 @@ class DockerCollector:
                         "container_id": container_id,
                         "last_rx": 0,
                         "last_tx": 0,
-                        "last_active": created_at.isoformat(timespec='milliseconds').replace("+00:00", "Z")
+                        "last_active": created_at.isoformat(timespec='milliseconds').replace("+00:00", "Z"),
+                        "id": None  # добавляем, чтобы потом обновить из API
                     }
                     self.known_containers.append(known)
 
@@ -85,6 +83,23 @@ class DockerCollector:
 
                         known["last_rx"] = rx
                         known["last_tx"] = tx
+
+                        is_alive = (now - datetime.fromisoformat(known["last_active"].replace("Z", "+00:00"))) <= timedelta(minutes=2)
+                        status = "running" if is_alive else "exited"
+
+                        global_container_id = known.get("id")
+                        if global_container_id:
+                            payload = {
+                                "status": status,
+                                "created_at": datetime.fromisoformat(container.attrs['Created'].replace("Z", "+00:00")).isoformat(timespec='milliseconds').replace("+00:00", "Z"),
+                                "last_active": known["last_active"],
+                                "id": global_container_id
+                            }
+
+                            await self.api_auth.change_container_data(data=payload, id=global_container_id)
+
+                            if self.api_auth.redis_stream_manager:
+                                await self.api_auth.redis_stream_manager.send_message(payload)
 
                     except Exception as e:
                         self.logger.warning(f"Не удалось получить stats для {container_name}: {e}")
@@ -111,9 +126,8 @@ class DockerCollector:
                     "ip": container_ip,
                     "created_at": created_at.isoformat(timespec='milliseconds').replace("+00:00", "Z"),
                     "network_ids": network_ids,
-                    "last_active": known["last_active"]  # Уже в правильном формате
+                    "last_active": known["last_active"]
                 })
-
             return result
 
         except Exception as e:

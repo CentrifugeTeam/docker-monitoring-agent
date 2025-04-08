@@ -5,6 +5,7 @@ import psutil
 from config.settings import settings
 from .senders.api_auth import Api
 from .collectors.docker_get_topology import DockerCollector
+from  datetime import datetime, timezone
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -71,8 +72,24 @@ class DockerAgent:
         if response:
             new_known_networks = response.get("networks", [])
             new_known_containers = response.get("containers", [])
-            self.collector.known_networks.extend(new_known_networks)
-            self.collector.known_containers.extend(new_known_containers)
+
+            self.collector.known_networks = new_known_networks
+
+            for new in new_known_containers:
+                found = False
+                for existing in self.collector.known_containers:
+                    if existing["container_id"] == new["container_id"]:
+                        existing["id"] = new["id"]
+                        found = True
+                        break
+                if not found:
+                    self.collector.known_containers.append({
+                        "container_id": new["container_id"],
+                        "id": new["id"],
+                        "last_rx": 0,
+                        "last_tx": 0,
+                        "last_active": datetime.now(tz=timezone.utc).isoformat(timespec='milliseconds').replace("+00:00", "Z")
+                    })
 
     async def _register_agent(self):
         """Регистрация агента через API"""

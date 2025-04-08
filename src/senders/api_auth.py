@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import httpx
 from config.settings import settings
+from .redis_streams import RedisStreamManager
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +11,8 @@ class Api:
         self.hostname = hostname
         self.ip = ip
         self.token = settings.TOKEN
+        self.redis_stream_manager = RedisStreamManager()
+        asyncio.create_task(self.redis_stream_manager.connect())
 
     async def register_agent(self):
         """Асинхронная регистрация агента и обновление токена"""
@@ -26,13 +30,9 @@ class Api:
                 response = await client.post(url, json=payload)
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info("✅ Агент успешно зарегистрирован")
-                    logger.info(f"📦 Ответ сервера: {data}")
-
                     new_token = data.get("token")
                     if new_token:
                         self.token = new_token
-                        logger.info("🔑 Токен обновлён")
                     else:
                         logger.warning("⚠️ Новый токен не получен")
                 else:
@@ -43,15 +43,15 @@ class Api:
             logger.error(f"💥 Неизвестная ошибка: {e}")
 
     async def send_compressed_data(self, data: dict):
-        """данные и отправляет"""
+        """отправка топологию сетей и контейнеров"""
         try:
             networks = data["networks"]
             containers = data["containers"]
+
             data = {
                 "networks": networks,
                 "containers": containers
             }
-            logger.error(f"data:  {data}")
             url = f"{settings.API_URL}/containers/batch"
             headers = {"Authorization": f"Bearer {self.token}"}
 
@@ -81,3 +81,14 @@ class Api:
                 response = await client.post(url, json=data, headers=headers)
         except Exception as e:
             logger.error(f"💥 Ошибка при создание или получение id overlay сети: {e}")
+
+    async def change_container_data(self, data: dict, id: int):
+        try:
+            url = f"{settings.API_URL}/containers/{id}"
+            logger.error(f"data: {data}")
+            headers = {"Authorization": f"Bearer {self.token}"}
+            async with httpx.AsyncClient() as client:
+                response = await client.patch(url, json=data, headers=headers)
+                logger.error(f"response: {response}")
+        except Exception as e:
+            logger.error(f"💥 Ошибка при измении данных о контейнере: {e}")

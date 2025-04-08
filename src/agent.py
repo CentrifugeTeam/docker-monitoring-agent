@@ -13,7 +13,7 @@ class DockerAgent:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.hostname = socket.gethostname()
-        self.local_ip = "127.0.0.1"
+        self.local_ip = self._get_local_ip()
         self.interval = settings.INTERVAL
         self.api_auth = Api(self.hostname, self.local_ip)
         self.collector = DockerCollector(
@@ -67,6 +67,21 @@ class DockerAgent:
         except Exception as e:
             self.logger.error(f"Error collecting data: {e}")
             return {}
+
+    def _get_local_ip(self):
+        """Получение локального IP-адреса хоста"""
+        try:
+            # Получаем все сетевые интерфейсы
+            interfaces = psutil.net_if_addrs()
+            for interface, addrs in interfaces.items():
+                for addr in addrs:
+                    if addr.family == socket.AF_INET and not addr.address.startswith("127"):
+                        # Если это IPv4 и не является адресом локального хоста
+                        return addr.address
+            return "127.0.0.1"  # fallback, если не найдено подходящего интерфейса
+        except Exception as e:
+            self.logger.error(f"Error getting local IP: {e}")
+            return "127.0.0.1"
 
     async def _send_report(self, report):
         """Отправка топологии данных через API"""

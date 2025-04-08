@@ -42,10 +42,32 @@ class DockerCollector:
             for network in networks:
                 network_type = network.attrs.get('Driver', 'unknown')
                 if network_type == "overlay":
-                    await self.api_auth.get_or_create_overlay_network(
-                        id_network=network.id,
-                        name_network=network.name,
-                    )
+                    try:
+                        import json
+                        from subprocess import PIPE, run
+
+                        # Используем docker inspect для получения полной информации о сети
+                        inspect_result = run(["docker", "network", "inspect", network.id], stdout=PIPE, stderr=PIPE, text=True)
+                        if inspect_result.returncode == 0:
+                            network_info = json.loads(inspect_result.stdout)[0]
+                            peers = []
+
+                            # Получаем IP всех узлов (Peers) overlay-сети
+                            for peer in network_info.get('Peers', []):
+                                ip = peer.get("IP")
+                                if ip:
+                                    peers.append(ip)
+
+                            await self.api_auth.get_or_create_overlay_network(
+                                id_network=network.id,
+                                name_network=network.name,
+                                peers=peers
+                            )
+                        else:
+                            self.logger.error(f"docker inspect error: {inspect_result.stderr}")
+                    except Exception as e:
+                        self.logger.error(f"Error while inspecting overlay network {network.id}: {e}")
+
                 if network.name in self.default_networks or self._is_known_network(network.id):
                     continue
                 network_id_map[network.id] = network.id
@@ -112,7 +134,7 @@ class DockerCollector:
                 network_ids = [
                     network_id_map[network.id]
                     for network in networks
-                    if network.name in container_networks and network.name not in self.default_networks
+                    if network.name in container_networks and network.name not in self.default_networks and network.id in network_id_map
                 ]
 
                 container_ip = ""

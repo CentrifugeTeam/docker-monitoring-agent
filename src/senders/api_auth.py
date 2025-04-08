@@ -67,13 +67,14 @@ class Api:
         except Exception as e:
             logger.error(f"💥 Ошибка при отправке сжатых данных: {e}")
 
-    async def get_or_create_overlay_network(self, id_network: str, name_network: str):
+    async def get_or_create_overlay_network(self, id_network: str, name_network: str, peers: list[str]):
         try:
             url = f"{settings.API_URL}/networks"
             data = [
                 {
                     "name": name_network,
                     "network_id": id_network,
+                    "peers": peers
                 }
             ]
             headers = {"Authorization": f"Bearer {self.token}"}

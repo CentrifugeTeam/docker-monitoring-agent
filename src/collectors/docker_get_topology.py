@@ -100,10 +100,10 @@ class DockerCollector:
                                 "id": global_container_id
                             }
 
-                            # await self.api_auth.change_container_data(data=payload, id=global_container_id)
+                            await self.api_auth.change_container_data(data=payload, id=global_container_id)
 
-                            # if self.api_auth.redis_stream_manager:
-                            #     await self.api_auth.redis_stream_manager.send_message(payload)
+                            if self.api_auth.redis_stream_manager:
+                                await self.api_auth.redis_stream_manager.send_message(payload)
 
                     except Exception as e:
                         self.logger.warning(f"Не удалось получить stats для {container_name}: {e}")

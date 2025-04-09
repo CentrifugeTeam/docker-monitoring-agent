@@ -1,6 +1,10 @@
 import asyncio
 import docker
 import logging
+import shlex
+from subprocess import Popen, PIPE, run
+import re
+import json
 from datetime import datetime, timezone, timedelta
 
 class DockerCollector:
@@ -56,9 +60,6 @@ class DockerCollector:
                 network_type = network.attrs.get('Driver', 'unknown')
                 if network_type == "overlay":
                     try:
-                        import json
-                        from subprocess import PIPE, run
-
                         # Используем docker inspect для получения полной информации о сети
                         inspect_result = run(["docker", "network", "inspect", network.id], stdout=PIPE, stderr=PIPE, text=True)
                         if inspect_result.returncode == 0:
@@ -161,8 +162,8 @@ class DockerCollector:
 
                             await self.api_auth.change_container_data(data=payload, id=global_container_id)
 
-                            if self.api_auth.redis_stream_manager:
-                                await self.api_auth.redis_stream_manager.send_message(payload)
+                            # if self.api_auth.redis_stream_manager:
+                            #     await self.api_auth.redis_stream_manager.send_message(payload)
 
                     except Exception as e:
                         self.logger.warning(f"Не удалось получить stats для {container_name}: {e}")
@@ -191,6 +192,57 @@ class DockerCollector:
                     "network_ids": network_ids,
                     "last_active": known["last_active"]
                 })
+
+            try:
+                # Карта IP → контейнер
+                ip_to_container = {
+                    c["ip"]: c for c in result["containers"] if c["ip"]
+                }
+
+                # Запускаем tcpdump на короткое время (3 секунды)
+                cmd = shlex.split("sudo timeout 3 tcpdump -nn -i any ip")
+                with Popen(cmd, stdout=PIPE, stderr=PIPE, text=True) as proc:
+                    stdout, _ = proc.communicate()
+
+                traffic_map = {}
+
+                # Разбираем строки вывода tcpdump
+                for line in stdout.splitlines():
+                    match = re.match(r'IP (\d+\.\d+\.\d+\.\d+)\.\d+ > (\d+\.\d+\.\d+\.\d+)\.\d+: .* length (\d+)', line)
+                    if match:
+                        src_ip, dst_ip, length = match.groups()
+                        length = int(length)
+                        key = (src_ip, dst_ip)
+                        if key not in traffic_map:
+                            traffic_map[key] = {"packets": 0}
+                        traffic_map[key]["packets"] += 1
+
+                # Заполняем поля у контейнеров
+                for (src_ip, dst_ip), data in traffic_map.items():
+                    src_container = ip_to_container.get(src_ip)
+                    dst_container = ip_to_container.get(dst_ip)
+
+                    if src_container:
+                        if "traffic" not in src_container:
+                            src_container["traffic"] = []
+                        src_container["traffic"].append({
+                            "source": src_ip,
+                            "destination": dst_ip
+                        })
+                        src_container["packets_number"] = src_container.get("packets_number", 0) + data["packets"]
+
+                    if dst_container:
+                        dst_container["packets_number"] = dst_container.get("packets_number", 0) + data["packets"]
+
+                # Добавим в networks пакеты, если надо
+                for net in result["networks"]:
+                    net["packets_number"] = 0
+                    for container in result["containers"]:
+                        if net["network_id"] in container["network_ids"]:
+                            net["packets_number"] += container.get("packets_number", 0)
+
+            except Exception as e:
+                self.logger.warning(f"Ошибка при сборе сетевого трафика: {e}")
 
             if result:
                 return result

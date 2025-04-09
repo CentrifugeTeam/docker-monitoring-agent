@@ -24,7 +24,7 @@ class RedisStreamManager:
     """Установка соединения с Redis"""
     try:
       self.redis = Redis(host='158.160.47.155', port='6379', db=0, decode_responses=True)
-      await self.redis.ping()  # Проверка соединения
+      # await self.redis.ping()  # Проверка соединения
       self.logger.info("Connected to Redis successfully")
     except Exception as e:
       self.logger.error(f"Redis connection error: {e}")

@@ -32,6 +32,7 @@ class Api:
                 if response.status_code == 200:
                     data = response.json()
                     new_token = data.get("token")
+                    logger.info(data.get("host")["ip"])
                     if new_token:
                         self.token = new_token
                     else:
